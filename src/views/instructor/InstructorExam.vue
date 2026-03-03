@@ -1,0 +1,210 @@
+<template>
+  <div class="p-8 bg-gray-50 min-h-screen relative">
+    <div class="flex justify-between items-center mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">Exams</h1>
+        <p class="text-gray-500">Manage your examination content and settings</p>
+      </div>
+      <button
+        @click="openModalForCreate"
+        class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md shadow-indigo-100"
+      >
+        <span class="text-xl leading-none">+</span> Create New Exam
+      </button>
+    </div>
+
+    <div class="p-6 bg-gray-100">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+              <tr>
+                <th class="px-6 py-3 text-left">Exam Title</th>
+                <th class="px-6 py-3 text-left">Questions</th>
+                <th class="px-6 py-3 text-left">Status</th>
+                <th class="px-6 py-3 text-left">Last Modified</th>
+                <th class="px-6 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody class="divide-y divide-gray-200">
+              <tr v-if="exams.length === 0">
+                <td colspan="5" class="px-6 py-10 text-center text-gray-500 italic">
+                  No exams found. Create your first exam!
+                </td>
+              </tr>
+              <tr v-for="exam in exams" :key="exam.id">
+                <td class="px-6 py-4 font-medium text-gray-900">{{ exam.title }}</td>
+                <td class="px-6 py-4 font-medium text-gray-900">{{exam.questions_count }}</td>
+
+                <td class="px-6 py-4 font-medium text-gray-900">
+                  <span class="px-2 py-1 text-xs font-medium rounded-full" :class="statusClasses[exam.status]">
+                    {{ exam.status }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-gray-500">{{ exam.lastModified }}</td>
+                <td class="px-6 py-4 text-right space-x-2">
+                  <button @click="openModalForEdit(exam)" class="text-indigo-600 hover:text-indigo-900 font-semibold">Edit</button>
+                  <button @click="handleDelete(exam.id)" class="text-red-600 hover:text-red-900 font-semibold">Delete</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <Transition name="fade">
+      <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" @click="isModalOpen = false"></div>
+        <div class="bg-white text-slate-800 w-full max-w-lg rounded-2xl shadow-2xl z-10 overflow-hidden relative">
+          <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+            <h2 class="text-xl font-bold text-slate-800">{{ isEditMode ? 'Edit Exam' : 'Create New Exam' }}</h2>
+            <button @click="isModalOpen = false" class="text-slate-400 hover:text-slate-600">✕</button>
+          </div>
+
+          <form @submit.prevent="handleSubmit" class="p-6 space-y-5">
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-1.5">Exam Title</label>
+              <input v-model="form.title" type="text" class="w-full px-4 py-2.5 rounded-xl border border-slate-200" required />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-1.5">Subject</label>
+              <textarea v-model="form.subject" rows="3" class="w-full px-4 py-2.5 rounded-xl border border-slate-200"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Total Marks</label>
+                <input v-model="form.total_marks" type="number" class="w-full px-4 py-2.5 rounded-xl border border-slate-200" placeholder="100" required />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Pass Marks</label>
+                <input v-model="form.pass_marks" type="number" class="w-full px-4 py-2.5 rounded-xl border border-slate-200" placeholder="40" required />
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-slate-700 mb-1.5">Duration (Minutes)</label>
+              <input v-model="form.duration_minutes" type="number" class="w-full px-4 py-2.5 rounded-xl border border-slate-200" placeholder="e.g. 60" required />
+            </div>
+            <div class="flex items-center gap-3">
+              <input v-model="form.is_published" type="checkbox" id="is_published" class="w-5 h-5 text-indigo-600 rounded" />
+              <label for="is_published" class="text-sm font-semibold text-slate-700">Publish Exam</label>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+              <button type="button" @click="isModalOpen = false" class="px-5 py-2.5 text-slate-600">Cancel</button>
+              <button type="submit" class="px-8 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold">
+                {{ isEditMode ? 'Update Exam' : 'Save Exam' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Transition>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import api from "@/services/api";
+
+const isModalOpen = ref(false)
+const isEditMode = ref(false)
+const currentExamId = ref(null)
+const exams = ref([])
+
+const statusClasses = {
+  Published: 'bg-green-100 text-green-700',
+  Unpublished: 'bg-red-100 text-gray-600',
+}
+
+const form = reactive({
+  title: '',
+  subject: '',
+  total_marks: null,
+  pass_marks: null,
+  duration_minutes: null,
+  is_published: false,
+})
+
+const fetchExams = async () => {
+  try {
+    
+    const response = await api.get('/instructor/exams');
+    const apiData = response.data.data || response.data;
+
+    exams.value = apiData.map(exam => ({
+      ...exam,
+      questions_count: exam.questions_count ?? 0,
+      status: exam.is_published ? 'Published' : 'Unpublished',
+      lastModified: exam.updated_at ? new Date(exam.updated_at).toLocaleDateString('en-GB') : 'N/A'
+
+    }));
+  } catch (error) { 
+    console.error(error); }
+}
+
+const openModalForCreate = () => {
+  isEditMode.value = false;
+  Object.assign(form, { title: '', subject: '', total_marks: null, pass_marks: null, duration_minutes: null, is_published: false });
+  isModalOpen.value = true;
+}
+
+const openModalForEdit = (exam) => {
+  isEditMode.value = true;
+  currentExamId.value = exam.id;
+  
+  Object.assign(form, {
+    title: exam.title,
+    subject: exam.subject,
+    total_marks: exam.total_marks,
+    pass_marks: exam.pass_marks,
+    duration_minutes: exam.duration_minutes,
+    is_published: !!exam.is_published
+  });
+  isModalOpen.value = true;
+}
+
+const handleSubmit = async () => {
+
+  if (Number(form.pass_marks) > Number(form.total_marks)) {
+    alert('Pass marks cannot be greater than total marks!');
+    return;
+  }
+
+  try {
+    const payload = {
+      ...form,
+      is_published: form.is_published ? 1 : 0
+    };
+
+    const url = isEditMode.value 
+      ? `/instructor/exams/${currentExamId.value}` 
+      : '/instructor/exams';
+
+    // এডিট হলে PUT, নতুন হলে POST
+    const response = isEditMode.value 
+      ? await api.put(url, payload) 
+      : await api.post(url, payload);
+   
+    if (response.data.success) {
+      await fetchExams();
+      isModalOpen.value = false;
+      alert(isEditMode.value ? 'Exam updated successfully!' : 'Exam created successfully!');
+    }
+    
+  } catch (error) { alert('Operation failed!'); }
+}
+
+const handleDelete = async (id) => {
+  if (!confirm('Are you sure you want to delete this exam?')) return;
+  try {
+    await api.delete(`/instructor/exams/${id}`);
+    alert('Exam deleted successfully!');
+    await fetchExams();
+  } catch (error) { alert('Delete failed!'); }
+}
+
+onMounted(fetchExams);
+</script>
