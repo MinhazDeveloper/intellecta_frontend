@@ -2,10 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '@/stores/auth';
 
 const apiClient = axios.create({
-  // baseURL: 'http://localhost:8000/api',
-  // baseURL: import.meta.env.VITE_API_BASE_URL || 'https://intellecta-backend-aof3.onrender.com/api',
-  baseURL: 'https://intellecta-backend-aof3.onrender.com/api',
-
+  baseURL: import.meta.env.VITE_API_BASE_URL,
   withCredentials: true,
 });
 
